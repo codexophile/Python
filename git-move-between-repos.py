@@ -19,17 +19,17 @@ def move_files_between_repos(file_list, source_repo, dest_repo):
         dest_repo (str): Path to destination repository
     """
     # Clean filenames
-    cleaned_files = [clean_filename(f) for f in file_list]
+    # file_list = [clean_filename(f) for f in file_list]
     
     # Create paths file for git-filter-repo
     paths_file = Path('files_to_remove.txt')
     with open(paths_file, 'w') as f:
-        for filename in cleaned_files:
+        for filename in file_list:
             f.write(f'{filename}\n')
     
     # Copy files to destination repository
     print("Copying files to destination repository...")
-    for filename in cleaned_files:
+    for filename in file_list:
         source_path = Path(source_repo) / filename
         dest_path = Path(dest_repo) / filename
         
