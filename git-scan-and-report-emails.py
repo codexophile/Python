@@ -31,6 +31,28 @@ def extract_emails_from_repo(repo_path):
         print(f"Exception in {repo_path}: {e}")
         return set()
 
+def scan_directory_for_git_repos(directory):
+    print(f"Scanning {directory} for Git repositories...")
+    git_repos = find_git_repos(directory)
+    print(f"Found {len(git_repos)} Git repositories in {directory}.")
+    
+    # Dictionary to store emails and their associated repo paths
+    email_repo_map = {}
+
+    for repo in git_repos:
+        print(f"Extracting emails from {repo}...")
+        emails = extract_emails_from_repo(repo)
+        for email in emails:
+            if email not in email_repo_map:
+                email_repo_map[email] = []
+            email_repo_map[email].append(repo)
+    
+    print("\nEmail addresses and their associated repository paths:")
+    for email, repos in sorted(email_repo_map.items()):
+        print(f"\nEmail: {email}")
+        for repo in repos:
+            print(f"  - {repo}")
+
 def scan_system_for_git_repos():
     # Get all disk drives (Unix-like systems)
     if os.name == 'posix':
@@ -41,7 +63,9 @@ def scan_system_for_git_repos():
         print("Unsupported OS")
         return
 
-    all_emails = set()
+    # Dictionary to store emails and their associated repo paths
+    email_repo_map = {}
+
     for drive in drives:
         print(f"Scanning {drive} for Git repositories...")
         git_repos = find_git_repos(drive)
@@ -50,11 +74,31 @@ def scan_system_for_git_repos():
         for repo in git_repos:
             print(f"Extracting emails from {repo}...")
             emails = extract_emails_from_repo(repo)
-            all_emails.update(emails)
+            for email in emails:
+                if email not in email_repo_map:
+                    email_repo_map[email] = []
+                email_repo_map[email].append(repo)
     
-    print("\nUnique email addresses found:")
-    for email in sorted(all_emails):
-        print(email)
+    print("\nEmail addresses and their associated repository paths:")
+    for email, repos in sorted(email_repo_map.items()):
+        print(f"\nEmail: {email}")
+        for repo in repos:
+            print(f"  - {repo}")
+
+def main():
+    print("Do you want to scan the entire system or a specific folder?")
+    choice = input("Enter 'system' to scan the entire system or 'folder' to scan a specific folder: ").strip().lower()
+    
+    if choice == 'system':
+        scan_system_for_git_repos()
+    elif choice == 'folder':
+        folder_path = input("Enter the path of the folder to scan: ").strip()
+        if os.path.isdir(folder_path):
+            scan_directory_for_git_repos(folder_path)
+        else:
+            print("Invalid folder path. Please provide a valid directory.")
+    else:
+        print("Invalid choice. Please enter 'system' or 'folder'.")
 
 if __name__ == "__main__":
-    scan_system_for_git_repos()
+    main()
