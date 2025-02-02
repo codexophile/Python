@@ -1,3 +1,10 @@
+# The purpose of this code is to monitor the CPU usage and activity of a 
+# specified web browser (e.g., Chrome, Firefox, Edge, Vivaldi) and 
+# automatically bring the browser window to the foreground when it finishes 
+# loading a page. This can be useful in scenarios where you want to ensure that 
+# the browser window is focused and ready for interaction after it completes a 
+# resource-intensive task, such as loading a complex web page.
+
 import win32gui
 import win32con
 import win32process
