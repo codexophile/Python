@@ -254,18 +254,18 @@ class SubtitleApp(TkinterDnD.Tk): # Inherit from TkinterDnD.Tk
             if file_ext in ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv']:
                 self.movie_file_path.set(dropped_file_path)
                 self.movie_drop_label.configure(text=f"Movie:\n{file_name}", font=STYLE_CONFIG["font_bold"])
-                self.update_status(f"Movie file selected: {file_name}")
+                self.update_status_display(f"Movie file selected: {file_name}")
             else:
-                self.update_status(f"Error: Dropped file '{file_name}' doesn't look like a movie file.", True)
+                self.update_status_display(f"Error: Dropped file '{file_name}' doesn't look like a movie file.", True)
                 return # Don't proceed if wrong file type
 
         elif is_zip_zone:
             if file_ext == '.zip':
                 self.zip_file_path.set(dropped_file_path)
                 self.zip_drop_label.configure(text=f"Zip:\n{file_name}", font=STYLE_CONFIG["font_bold"])
-                self.update_status(f"Zip file selected: {file_name}")
+                self.update_status_display(f"Zip file selected: {file_name}")
             else:
-                self.update_status(f"Error: Dropped file '{file_name}' is not a .zip file.", True)
+                self.update_status_display(f"Error: Dropped file '{file_name}' is not a .zip file.", True)
                 return # Don't proceed if wrong file type
 
         # Check if both files are now set and trigger processing
@@ -281,7 +281,7 @@ class SubtitleApp(TkinterDnD.Tk): # Inherit from TkinterDnD.Tk
             # self.movie_drop_label.drop_target_unregister()
             # self.zip_drop_label.drop_target_unregister()
 
-            self.update_status("Both files ready. Starting process...")
+            self.update_status_display("Both files ready. Starting process...")
             # Run the processing function, passing the GUI update method
             success = process_subtitle_zip(movie_path, zip_path, self.update_status_display)
 
