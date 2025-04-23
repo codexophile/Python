@@ -118,7 +118,6 @@ class WallpaperManager:
         
         self.root.after(1500, tooltip.destroy)
 
-    # Keep all other methods the same as in the original code
     def get_image_cache(self): return self.get_image_cache
     def hex_to_ascii(self, hex_data): return self.hex_to_ascii
     def extract_path(self, data): return self.extract_path
