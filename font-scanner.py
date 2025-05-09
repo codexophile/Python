@@ -40,7 +40,11 @@ def get_main_font_names(folder_path):
     return sorted(main_font_names)  # Sort the names alphabetically
 
 def main():
-    folder_path = sys.argv[1] if sys.argv[1] else input("Enter the path to the folder containing font files: ").strip()
+    
+    if sys.argv.__len__() > 1:
+        folder_path = sys.argv[1]
+    else:
+        folder_path = os.getcwd()
     
     if not os.path.isdir(folder_path):
         print("Invalid folder path.")
