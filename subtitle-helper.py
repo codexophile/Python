@@ -4,9 +4,7 @@ import zipfile
 import shutil
 import tkinter as tk
 from tkinter import ttk
-from tkinterdnd2 import DND_FILES, TkinterDnD # Import TkinterDnD
-
-# --- Installation Check ---
+# Import TkinterDnD - Installation check is important
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
 except ImportError:
@@ -16,6 +14,8 @@ except ImportError:
 
 # --- Constants ---
 SUBTITLE_EXTENSIONS = {'.srt', '.sub', '.ass', '.vtt', '.ssa'}
+VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv'} # For identifying movie files
+
 # Define some basic colors and styles
 STYLE_CONFIG = {
     "bg_color": "#f0f0f0",
@@ -141,182 +141,149 @@ class SubtitleApp(TkinterDnD.Tk): # Inherit from TkinterDnD.Tk
         self.zip_file_path = tk.StringVar()
 
         # --- Create Widgets ---
-        # Title Label
         title_label = ttk.Label(
-            self,
-            text="Drag & Drop Files",
-            font=STYLE_CONFIG["font_large"],
-            background=STYLE_CONFIG["bg_color"],
+            self, text="Drag & Drop Files or Drag Files onto Script",
+            font=STYLE_CONFIG["font_large"], background=STYLE_CONFIG["bg_color"],
             foreground=STYLE_CONFIG["text_color"]
         )
         title_label.pack(pady=(15, 10))
 
-        # Frame for Drop Zones
         drop_frame = ttk.Frame(self, style="App.TFrame")
         drop_frame.pack(pady=10, padx=20, fill=tk.X, expand=False)
         drop_frame.columnconfigure(0, weight=1)
         drop_frame.columnconfigure(1, weight=1)
 
-        # Style for frames
         style = ttk.Style(self)
         style.configure("App.TFrame", background=STYLE_CONFIG["bg_color"])
         style.configure("Drop.TLabel",
                         background=STYLE_CONFIG["drop_bg_idle"],
                         foreground=STYLE_CONFIG["text_color"],
-                        borderwidth=2,
-                        relief=tk.SOLID,
-                        padding=10,
-                        anchor=tk.CENTER,
-                        font=STYLE_CONFIG["font_normal"])
-        style.map("Drop.TLabel",
-                  relief=[('active', tk.RAISED)],
+                        borderwidth=2, relief=tk.SOLID, padding=10,
+                        anchor=tk.CENTER, font=STYLE_CONFIG["font_normal"])
+        style.map("Drop.TLabel", relief=[('active', tk.RAISED)],
                   background=[('active', STYLE_CONFIG["drop_bg_hover"])])
 
-
-        # Movie Drop Zone
         self.movie_drop_label = ttk.Label(
-            drop_frame,
-            text="Drop Movie File Here\n(e.g., .mp4, .mkv, .avi)",
-            style="Drop.TLabel",
-            width=30 # Approx width
+            drop_frame, text="Drop Movie File Here\n(e.g., .mp4, .mkv, .avi)",
+            style="Drop.TLabel", width=30
         )
         self.movie_drop_label.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        # Make the label a drop target that accepts files
         self.movie_drop_label.drop_target_register(DND_FILES)
         self.movie_drop_label.dnd_bind('<<Drop>>', self.handle_drop)
         self.movie_drop_label.dnd_bind('<<DragEnter>>', lambda e: self.update_drop_style(e.widget, hover=True))
         self.movie_drop_label.dnd_bind('<<DragLeave>>', lambda e: self.update_drop_style(e.widget, hover=False))
 
-
-        # Zip Drop Zone
         self.zip_drop_label = ttk.Label(
-            drop_frame,
-            text="Drop Subtitle Zip File Here\n(.zip)",
-            style="Drop.TLabel",
-            width=30 # Approx width
+            drop_frame, text="Drop Subtitle Zip File Here\n(.zip)",
+            style="Drop.TLabel", width=30
         )
         self.zip_drop_label.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-        # Make the label a drop target
         self.zip_drop_label.drop_target_register(DND_FILES)
         self.zip_drop_label.dnd_bind('<<Drop>>', self.handle_drop)
         self.zip_drop_label.dnd_bind('<<DragEnter>>', lambda e: self.update_drop_style(e.widget, hover=True))
         self.zip_drop_label.dnd_bind('<<DragLeave>>', lambda e: self.update_drop_style(e.widget, hover=False))
 
-        # Status Label
         self.status_label = ttk.Label(
-            self,
-            text="Waiting for files...",
-            font=STYLE_CONFIG["font_normal"],
-            background=STYLE_CONFIG["bg_color"],
-            foreground=STYLE_CONFIG["text_color"],
-            wraplength=450 # Wrap text if long
+            self, text="Waiting for files...", font=STYLE_CONFIG["font_normal"],
+            background=STYLE_CONFIG["bg_color"], foreground=STYLE_CONFIG["text_color"],
+            wraplength=450
         )
         self.status_label.pack(pady=(15, 10), padx=20, fill=tk.X)
 
-        # Reset Button
         reset_button = ttk.Button(self, text="Reset", command=self.reset_ui)
         reset_button.pack(pady=(0, 15))
 
     def update_drop_style(self, widget, hover=False):
-        """Changes drop target appearance on drag hover."""
         if hover:
             widget.configure(background=STYLE_CONFIG["drop_bg_hover"])
         else:
             widget.configure(background=STYLE_CONFIG["drop_bg_idle"])
 
-    def handle_drop(self, event):
-        """Handles the drop event for both zones."""
-        # event.data contains a string with space-separated, brace-enclosed paths
-        # We need to parse this carefully.
-        # Example: '{/path/to/file1 with space} {/path/to/file2}'
-        files = self.tk.splitlist(event.data) # Use tk.splitlist for correct parsing
+    def set_file(self, file_path, file_type):
+        """
+        Sets a file (movie or zip), updates UI, and returns success.
+        Args:
+            file_path (str): The path to the file.
+            file_type (str): "movie" or "zip".
+        Returns:
+            bool: True if file was successfully set, False otherwise.
+        """
+        if not os.path.isfile(file_path):
+            self.update_status_display(f"Error: {file_type.capitalize()} path invalid: '{os.path.basename(file_path)}'", True)
+            return False
 
-        if not files:
-            self.update_status("No files detected in drop.", True)
-            return
-
-        # Assume only one file is dropped per zone for simplicity
-        dropped_file_path = files[0]
-        file_name = os.path.basename(dropped_file_path)
+        file_name = os.path.basename(file_path)
         file_ext = os.path.splitext(file_name)[1].lower()
 
-        # Determine which drop zone received the file
-        target_widget = event.widget
+        if file_type == "movie":
+            if file_ext in VIDEO_EXTENSIONS:
+                self.movie_file_path.set(file_path)
+                self.movie_drop_label.configure(text=f"Movie:\n{file_name}", font=STYLE_CONFIG["font_bold"])
+                self.update_status_display(f"Movie file set: {file_name}")
+                return True
+            else:
+                self.update_status_display(f"Error: '{file_name}' is not a recognized movie file.", True)
+                return False
+        elif file_type == "zip":
+            if file_ext == '.zip':
+                self.zip_file_path.set(file_path)
+                self.zip_drop_label.configure(text=f"Zip:\n{file_name}", font=STYLE_CONFIG["font_bold"])
+                self.update_status_display(f"Zip file set: {file_name}")
+                return True
+            else:
+                self.update_status_display(f"Error: '{file_name}' is not a .zip file.", True)
+                return False
+        return False
 
-        # Reset hover style
+
+    def handle_drop(self, event):
+        files = self.tk.splitlist(event.data)
+        if not files:
+            self.update_status_display("No files detected in drop.", True)
+            return
+
+        dropped_file_path = files[0]
+        target_widget = event.widget
         self.update_drop_style(target_widget, hover=False)
 
-        is_movie_zone = (target_widget == self.movie_drop_label)
-        is_zip_zone = (target_widget == self.zip_drop_label)
+        file_successfully_set = False
+        if target_widget == self.movie_drop_label:
+            file_successfully_set = self.set_file(dropped_file_path, "movie")
+        elif target_widget == self.zip_drop_label:
+            file_successfully_set = self.set_file(dropped_file_path, "zip")
 
-        if is_movie_zone:
-            # Basic check for common video extensions (can be expanded)
-            if file_ext in ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv']:
-                self.movie_file_path.set(dropped_file_path)
-                self.movie_drop_label.configure(text=f"Movie:\n{file_name}", font=STYLE_CONFIG["font_bold"])
-                self.update_status_display(f"Movie file selected: {file_name}")
-            else:
-                self.update_status_display(f"Error: Dropped file '{file_name}' doesn't look like a movie file.", True)
-                return # Don't proceed if wrong file type
-
-        elif is_zip_zone:
-            if file_ext == '.zip':
-                self.zip_file_path.set(dropped_file_path)
-                self.zip_drop_label.configure(text=f"Zip:\n{file_name}", font=STYLE_CONFIG["font_bold"])
-                self.update_status_display(f"Zip file selected: {file_name}")
-            else:
-                self.update_status_display(f"Error: Dropped file '{file_name}' is not a .zip file.", True)
-                return # Don't proceed if wrong file type
-
-        # Check if both files are now set and trigger processing
-        self.check_and_run_processing()
+        if file_successfully_set:
+            self.check_and_run_processing()
 
     def check_and_run_processing(self):
-        """Checks if both files are provided and runs the main logic."""
         movie_path = self.movie_file_path.get()
         zip_path = self.zip_file_path.get()
 
         if movie_path and zip_path:
-            # Disable drop zones during processing? (Optional)
-            # self.movie_drop_label.drop_target_unregister()
-            # self.zip_drop_label.drop_target_unregister()
-
             self.update_status_display("Both files ready. Starting process...")
-            # Run the processing function, passing the GUI update method
-            success = process_subtitle_zip(movie_path, zip_path, self.update_status_display)
-
-            # Re-enable drop zones if they were disabled
-            # self.movie_drop_label.drop_target_register(DND_FILES)
-            # self.zip_drop_label.drop_target_register(DND_FILES)
-
-            # Optionally reset after success/failure, or leave as is
-            # if success:
-            #    self.reset_ui(clear_status=False) # Keep success message
-            # else:
-            #    # Keep error message and file names displayed
-            #    pass
+            process_subtitle_zip(movie_path, zip_path, self.update_status_display)
 
     def update_status_display(self, message, is_error=False):
-        """Updates the status label in the GUI."""
         if is_error:
             self.status_label.configure(text=message, foreground=STYLE_CONFIG["error_color"])
-        elif "success" in message.lower():
+        elif "success" in message.lower() or "successfully" in message.lower() : # Success is a keyword
              self.status_label.configure(text=message, foreground=STYLE_CONFIG["success_color"])
-        else:
+        else: # Neutral or informational message
             self.status_label.configure(text=message, foreground=STYLE_CONFIG["text_color"])
-        self.update_idletasks() # Force GUI update
+        self.update_idletasks()
 
     def reset_ui(self, clear_status=True):
-        """Resets the UI to its initial state."""
         self.movie_file_path.set("")
         self.zip_file_path.set("")
         self.movie_drop_label.configure(
             text="Drop Movie File Here\n(e.g., .mp4, .mkv, .avi)",
-            font=STYLE_CONFIG["font_normal"]
+            font=STYLE_CONFIG["font_normal"],
+            background=STYLE_CONFIG["drop_bg_idle"]
         )
         self.zip_drop_label.configure(
             text="Drop Subtitle Zip File Here\n(.zip)",
-            font=STYLE_CONFIG["font_normal"]
+            font=STYLE_CONFIG["font_normal"],
+            background=STYLE_CONFIG["drop_bg_idle"]
         )
         if clear_status:
             self.update_status_display("Waiting for files...")
@@ -326,4 +293,52 @@ class SubtitleApp(TkinterDnD.Tk): # Inherit from TkinterDnD.Tk
 # --- Main execution ---
 if __name__ == "__main__":
     app = SubtitleApp()
+
+    args = sys.argv[1:]
+    files_successfully_set_from_args = 0
+    
+    if args:
+        print(f"Arguments received: {sys.argv[1:]}")
+        
+        movie_arg_found_and_set = False
+        zip_arg_found_and_set = False
+        
+        # Try to set the first valid movie and first valid zip from args
+        for arg_path in args:
+            if not os.path.isfile(arg_path):
+                print(f"Info: Argument '{os.path.basename(arg_path)}' is not a file, skipping.")
+                # Optionally update GUI status if it's a critical error for an arg
+                # app.update_status_display(f"Arg Error: '{os.path.basename(arg_path)}' not found.", True)
+                continue
+
+            file_ext = os.path.splitext(arg_path)[1].lower()
+
+            if not movie_arg_found_and_set and file_ext in VIDEO_EXTENSIONS:
+                if app.set_file(arg_path, "movie"):
+                    movie_arg_found_and_set = True
+                    files_successfully_set_from_args += 1
+            elif not zip_arg_found_and_set and file_ext == '.zip':
+                if app.set_file(arg_path, "zip"):
+                    zip_arg_found_and_set = True
+                    files_successfully_set_from_args += 1
+        
+        # Update status based on what was loaded from arguments
+        if movie_arg_found_and_set and zip_arg_found_and_set:
+            # `set_file` would have updated status for each, `check_and_run_processing` will state "Both files ready..."
+            pass 
+        elif movie_arg_found_and_set:
+            app.update_status_display(f"Movie '{os.path.basename(app.movie_file_path.get())}' loaded from args. Drop ZIP.", False)
+        elif zip_arg_found_and_set:
+            app.update_status_display(f"ZIP '{os.path.basename(app.zip_file_path.get())}' loaded from args. Drop Movie.", False)
+        elif args and files_successfully_set_from_args == 0: 
+            # Args were provided, but no movie or zip was successfully set from them.
+            # `set_file` would show specific errors for wrong types or invalid paths.
+            # This is a fallback status if nothing got loaded.
+            arg_basenames = [os.path.basename(p) for p in args]
+            app.update_status_display(f"Args: No movie/ZIP identified or set from: {', '.join(arg_basenames)}. Waiting for files.", True)
+
+        # If any files were successfully set from arguments, check if processing can start
+        if files_successfully_set_from_args > 0:
+            app.check_and_run_processing()
+
     app.mainloop()
