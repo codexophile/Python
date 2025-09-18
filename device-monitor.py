@@ -2,6 +2,117 @@ import wmi
 import time
 from win10toast import ToastNotifier # or from winotify import Notification, audio
 
+# --- System Tray integration (Windows) ---
+import os
+import sys
+import threading
+import ctypes
+
+try:
+    import pystray
+    from pystray import MenuItem as _MenuItem
+except Exception:
+    pystray = None
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except Exception:
+    Image = ImageDraw = ImageFont = None
+
+_tray_icon = None
+
+
+def _create_tray_image(width=64, height=64, text='DM'):
+    """Create a small in-memory icon image."""
+    if Image is None or ImageDraw is None:
+        return None
+    img = Image.new('RGBA', (width, height), (38, 38, 38, 255))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([(0, 0), (width - 1, height - 1)], outline=(90, 90, 90, 255))
+    try:
+        font = ImageFont.load_default()
+    except Exception:
+        font = None
+    if font is not None and hasattr(draw, "textsize"):
+        tw, th = draw.textsize(text, font=font)
+        draw.text(((width - tw) // 2, (height - th) // 2), text, font=font, fill=(0, 200, 255, 255))
+    return img
+
+
+def toggle_console_window(icon=None, item=None):
+    """Hide/show the current process console window on Windows."""
+    try:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if not hwnd:
+            print('[tray] No console window handle available to toggle (possibly running without a console).')
+            return
+        is_visible = ctypes.windll.user32.IsWindowVisible(hwnd) != 0
+        SW_HIDE = 0
+        SW_SHOW = 5
+        ctypes.windll.user32.ShowWindow(hwnd, SW_HIDE if is_visible else SW_SHOW)
+    except Exception as e:
+        print(f'[tray] Toggle console failed: {e}')
+
+
+def _do_restart(icon_ref):
+    """Perform restart in a safe way."""
+    try:
+        # Hide/stop tray to avoid duplicate icons
+        if icon_ref is not None:
+            try:
+                icon_ref.visible = False
+                icon_ref.stop()
+            except Exception:
+                pass
+
+        # Flush IO before exec
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        args = [sys.executable] + sys.argv
+        os.execv(sys.executable, args)
+    except Exception as e:
+        # Fallback: spawn new then exit current
+        try:
+            import subprocess
+            subprocess.Popen([sys.executable] + sys.argv)
+            os._exit(0)
+        except Exception as e2:
+            print(f'[tray] Restart failed: {e} / {e2}')
+
+
+def restart_program(icon=None, item=None):
+    """Restart the current Python script."""
+    print('[tray] Restarting script...')
+    threading.Thread(target=_do_restart, args=(icon,), daemon=True).start()
+
+
+def start_system_tray():
+    """Create and start the system tray icon in the background."""
+    global _tray_icon
+
+    if pystray is None:
+        print('[tray] pystray not installed. Run: pip install pystray pillow')
+        return None
+
+    if _tray_icon is not None:
+        return _tray_icon
+
+    image = _create_tray_image() or None
+    menu = pystray.Menu(
+        _MenuItem('Toggle Console Window', toggle_console_window),
+        _MenuItem('Restart Script', restart_program),
+    )
+    _tray_icon = pystray.Icon('device_monitor', image, 'Device Monitor', menu)
+
+    try:
+        _tray_icon.run_detached()
+    except AttributeError:
+        threading.Thread(target=_tray_icon.run, daemon=True).start()
+
+    return _tray_icon
+# --- End System Tray integration ---
+
 def show_notification(title, message):
     toaster = ToastNotifier()
     toaster.show_toast(title, message, duration=5, icon_path=None) # Customize icon_path if desired
@@ -63,4 +174,6 @@ def monitor_device_changes():
         time.sleep(2) # Check every 2 seconds to reduce CPU usage
 
 if __name__ == "__main__":
+    # Start tray first so it’s available while your script runs
+    start_system_tray()
     monitor_device_changes()
