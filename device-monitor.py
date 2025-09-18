@@ -20,6 +20,7 @@ except Exception:
     Image = ImageDraw = ImageFont = None
 
 _tray_icon = None
+_stop_event = threading.Event()
 
 
 def _create_tray_image(width=64, height=64, text='DM'):
@@ -52,6 +53,21 @@ def toggle_console_window(icon=None, item=None):
         ctypes.windll.user32.ShowWindow(hwnd, SW_HIDE if is_visible else SW_SHOW)
     except Exception as e:
         print(f'[tray] Toggle console failed: {e}')
+
+
+def hide_console_window():
+    """Hide the console window if it is currently visible."""
+    try:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if not hwnd:
+            # Likely running without a console (e.g., pythonw or integrated terminal)
+            return
+        is_visible = ctypes.windll.user32.IsWindowVisible(hwnd) != 0
+        if is_visible:
+            SW_HIDE = 0
+            ctypes.windll.user32.ShowWindow(hwnd, SW_HIDE)
+    except Exception as e:
+        print(f'[tray] Hide console failed: {e}')
 
 
 def _do_restart(icon_ref):
@@ -87,6 +103,20 @@ def restart_program(icon=None, item=None):
     threading.Thread(target=_do_restart, args=(icon,), daemon=True).start()
 
 
+def quit_program(icon=None, item=None):
+    """Gracefully stop the monitor loop and exit the program."""
+    print('[tray] Quit requested.')
+    # Signal the main loop to stop
+    _stop_event.set()
+    # Best-effort cleanup of tray icon from the tray thread
+    try:
+        if icon is not None:
+            icon.visible = False
+            icon.stop()
+    except Exception:
+        pass
+
+
 def start_system_tray():
     """Create and start the system tray icon in the background."""
     global _tray_icon
@@ -102,6 +132,7 @@ def start_system_tray():
     menu = pystray.Menu(
         _MenuItem('Toggle Console Window', toggle_console_window),
         _MenuItem('Restart Script', restart_program),
+        _MenuItem('Quit', quit_program),
     )
     _tray_icon = pystray.Icon('device_monitor', image, 'Device Monitor', menu)
 
@@ -124,7 +155,7 @@ def show_notification(title, message):
     #              icon=r"C:\path\to\your\icon.png").show()
     # Notification(app_id="DeviceMonitor", title=title, msg=message, icon=r"C:\path\to\icon.png").add_audio(audio.Mail, loop=False).show() # Example with sound [9]
 
-def monitor_device_changes():
+def monitor_device_changes(stop_event: threading.Event | None = None):
     c = wmi.WMI()
     
     print("Monitoring for device connection/disconnection events...")
@@ -140,7 +171,10 @@ def monitor_device_changes():
         print(f"Error getting initial device list: {e}")
         return
 
-    while True:
+    if stop_event is None:
+        stop_event = _stop_event
+
+    while not stop_event.is_set():
         try:
             # Get current device list
             current_devices = set()
@@ -171,9 +205,27 @@ def monitor_device_changes():
         except Exception as e:
             print(f"An error occurred: {e}")
         
-        time.sleep(2) # Check every 2 seconds to reduce CPU usage
+        # Check every 2 seconds to reduce CPU usage, but wake early on stop
+        for _ in range(20):  # 20 x 0.1s = 2s
+            if stop_event.is_set():
+                break
+            time.sleep(0.1)
+
+    print('Monitor loop stopped.')
 
 if __name__ == "__main__":
     # Start tray first so it’s available while your script runs
     start_system_tray()
-    monitor_device_changes()
+    # Hide the console at startup (best-effort; requires a real console window)
+    hide_console_window()
+
+    try:
+        monitor_device_changes(_stop_event)
+    finally:
+        # Ensure tray icon is cleaned up on exit
+        try:
+            if _tray_icon is not None:
+                _tray_icon.visible = False
+                _tray_icon.stop()
+        except Exception:
+            pass
