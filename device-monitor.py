@@ -71,9 +71,9 @@ def hide_console_window():
 
 
 def _do_restart(icon_ref):
-    """Perform restart in a safe way."""
+    """Perform restart in a safe way by spawning a new process and exiting."""
     try:
-        # Hide/stop tray to avoid duplicate icons
+        # Hide/stop tray to avoid duplicate icons lingering
         if icon_ref is not None:
             try:
                 icon_ref.visible = False
@@ -81,20 +81,20 @@ def _do_restart(icon_ref):
             except Exception:
                 pass
 
-        # Flush IO before exec
-        sys.stdout.flush()
-        sys.stderr.flush()
-
-        args = [sys.executable] + sys.argv
-        os.execv(sys.executable, args)
-    except Exception as e:
-        # Fallback: spawn new then exit current
+        # Flush IO before spawn
         try:
-            import subprocess
-            subprocess.Popen([sys.executable] + sys.argv)
-            os._exit(0)
-        except Exception as e2:
-            print(f'[tray] Restart failed: {e} / {e2}')
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+
+        import subprocess
+        args = [sys.executable] + sys.argv
+        subprocess.Popen(args, cwd=os.getcwd(), env=os.environ, shell=False)
+        # Hard-exit current process so only the new instance remains
+        os._exit(0)
+    except Exception as e:
+        print(f'[tray] Restart failed: {e}')
 
 
 def restart_program(icon=None, item=None):
