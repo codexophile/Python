@@ -13,6 +13,7 @@ class WallpaperManager:
     def __init__(self, root):
         """Initialize the application with UI components and event bindings"""
         self.root = root
+        self.preview_image_ref = None
         self.setup_window()
         self.setup_colors()
         self.configure_styles()
@@ -405,8 +406,9 @@ class WallpaperManager:
         """Update the preview image when a wallpaper is selected"""
         selected_item = self.image_list.selection()
         if selected_item:
+            item_id = selected_item[0]
             # Get file information
-            item_values = self.image_list.item(selected_item, "values")
+            item_values = self.image_list.item(item_id, "values")
             filename = item_values[0]
             image_path = item_values[1]
             
@@ -439,7 +441,7 @@ class WallpaperManager:
                 
                 # Update preview
                 self.preview_image.config(image=img_tk)
-                self.preview_image.image = img_tk  # Keep a reference to avoid garbage collection
+                self.preview_image_ref = img_tk
                 
                 # Center the image in canvas
                 canvas_width = self.preview_canvas.winfo_width()
@@ -468,7 +470,8 @@ class WallpaperManager:
         """Open File Explorer to the directory containing the selected wallpaper"""
         selected_item = self.image_list.selection()
         if selected_item:
-            image_path = self.image_list.item(selected_item, "values")[1]
+            item_id = selected_item[0]
+            image_path = self.image_list.item(item_id, "values")[1]
             if os.path.exists(image_path):
                 os.startfile(os.path.dirname(image_path))
                 self.status_bar.config(text=f"Opened folder: {os.path.dirname(image_path)}")
@@ -488,9 +491,10 @@ class WallpaperManager:
         if not selected_item:
             messagebox.showinfo("Selection", "Please select a wallpaper to delete")
             return
-            
-        filename = self.image_list.item(selected_item, "values")[0]
-        image_path = self.image_list.item(selected_item, "values")[1]
+
+        item_id = selected_item[0]
+        filename = self.image_list.item(item_id, "values")[0]
+        image_path = self.image_list.item(item_id, "values")[1]
         
         confirm = messagebox.askyesno(
             "Confirm Delete", 
@@ -500,8 +504,9 @@ class WallpaperManager:
         if confirm:
             try:
                 os.remove(image_path)
-                self.image_list.delete(selected_item)
+                self.image_list.delete(item_id)
                 self.preview_image.config(image="")
+                self.preview_image_ref = None
                 self.image_info.config(text="No wallpaper selected")
                 self.status_bar.config(text=f"Deleted: {filename}")
                 
@@ -520,7 +525,7 @@ class WallpaperManager:
             messagebox.showinfo("Selection", "Please select a wallpaper to copy its path")
             return
             
-        image_path = self.image_list.item(selected_item, "values")[1]
+        image_path = self.image_list.item(selected_item[0], "values")[1]
         self.root.clipboard_clear()
         self.root.clipboard_append(image_path)
         self.root.update()
@@ -534,8 +539,9 @@ class WallpaperManager:
             messagebox.showinfo("Selection", "Please select a wallpaper to set")
             return
             
-        image_path = self.image_list.item(selected_item, "values")[1]
-        filename = self.image_list.item(selected_item, "values")[0]
+        item_id = selected_item[0]
+        image_path = self.image_list.item(item_id, "values")[1]
+        filename = self.image_list.item(item_id, "values")[0]
         
         try:
             import ctypes
