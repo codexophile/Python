@@ -26,9 +26,10 @@ class WallpaperManager:
         """Configure the main application window"""
         self.root.title("Wallpaper Manager")
         self.root.geometry("1100x680")
-        self.root.minsize(900, 600)
+        self.root.minsize(780, 520)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+        self.root.configure(bg="#12161d")
         
         # Set window icon
         try:
@@ -38,34 +39,51 @@ class WallpaperManager:
     
     def setup_colors(self):
         """Define color scheme for the application"""
-        # Modern color palette
+        # Dark color palette
         self.colors = {
-            "primary": "#3498db",       # Blue
-            "primary_dark": "#2980b9",  # Darker blue
-            "secondary": "#2ecc71",     # Green for positive actions
-            "danger": "#e74c3c",        # Red for delete actions
-            "neutral": "#95a5a6",       # Gray for normal buttons
-            "bg_light": "#f5f7fa",      # Light background
-            "bg_dark": "#34495e",       # Dark background
-            "text_light": "#ecf0f1",    # Light text
-            "text_dark": "#2c3e50",     # Dark text
-            "border": "#bdc3c7",        # Border color
+            "primary": "#4f8cff",
+            "primary_dark": "#2f6fed",
+            "secondary": "#22c55e",
+            "danger": "#ef4444",
+            "neutral": "#334155",
+            "bg_light": "#151a22",
+            "bg_dark": "#0f131a",
+            "text_light": "#e5e7eb",
+            "text_dark": "#cbd5e1",
+            "border": "#2a3442",
         }
         
     def configure_styles(self):
         """Set up custom styles for UI components"""
         self.style = ttk.Style()
+        self.style.theme_use("clam")
         
         # Configure basic styles
         self.style.configure("TFrame", background=self.colors["bg_light"])
         self.style.configure("TLabel", background=self.colors["bg_light"], foreground=self.colors["text_dark"])
-        self.style.configure("TButton", background=self.colors["neutral"], padding=5)
+        self.style.configure("TButton", background=self.colors["neutral"], foreground=self.colors["text_light"], padding=5)
+        self.style.map(
+            "TButton",
+            background=[("active", self.colors["primary_dark"]), ("disabled", self.colors["bg_dark"])],
+            foreground=[("disabled", "#64748b")],
+        )
+
+        self.style.configure(
+            "TEntry",
+            fieldbackground=self.colors["bg_dark"],
+            foreground=self.colors["text_light"],
+            insertcolor=self.colors["text_light"],
+            bordercolor=self.colors["border"],
+            lightcolor=self.colors["border"],
+            darkcolor=self.colors["border"],
+            padding=6,
+        )
         
         # Custom styles for different components
         self.style.configure("Title.TLabel", 
                             font=("Segoe UI", 14, "bold"), 
                             padding=10, 
-                            background=self.colors["primary"],
+                            background=self.colors["bg_dark"],
                             foreground=self.colors["text_light"])
         
         self.style.configure("Preview.TLabel", 
@@ -75,31 +93,38 @@ class WallpaperManager:
         # Button styles
         self.style.configure("Primary.TButton", 
                             font=("Segoe UI", 10),
-                            background=self.colors["primary"])
+                    background=self.colors["primary"],
+                    foreground=self.colors["text_light"])
         
         self.style.configure("Success.TButton", 
                             font=("Segoe UI", 10),
-                            background=self.colors["secondary"])
+                    background=self.colors["secondary"],
+                    foreground=self.colors["text_light"])
         
         self.style.configure("Danger.TButton", 
                             font=("Segoe UI", 10),
-                            background=self.colors["danger"])
+                    background=self.colors["danger"],
+                    foreground=self.colors["text_light"])
         
         # Treeview styling
         self.style.configure("Treeview", 
                             rowheight=30,
                             background=self.colors["bg_light"],
                             fieldbackground=self.colors["bg_light"],
-                            font=("Segoe UI", 10))
+                    foreground=self.colors["text_light"],
+                    bordercolor=self.colors["border"],
+                    lightcolor=self.colors["border"],
+                    darkcolor=self.colors["border"],
+                    font=("Segoe UI", 10))
         
         self.style.configure("Treeview.Heading", 
                             font=("Segoe UI", 11, "bold"),
-                            background=self.colors["primary"],
+                    background=self.colors["bg_dark"],
                             foreground=self.colors["text_light"])
         
         # Configure hover and selection colors
         self.style.map("Treeview",
-                    background=[("selected", self.colors["primary"])],
+                background=[("selected", self.colors["primary_dark"])],
                     foreground=[("selected", self.colors["text_light"])])
         
     def create_layout(self):
