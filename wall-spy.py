@@ -4,7 +4,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import winreg
 from PIL import Image, ImageTk
-import colorsys
 
 
 class WallpaperManager:
@@ -13,7 +12,8 @@ class WallpaperManager:
     def __init__(self, root):
         """Initialize the application with UI components and event bindings"""
         self.root = root
-        self.preview_image_ref = None
+        self.thumbnail_refs = {}
+        self.resize_job = None
         self.setup_window()
         self.setup_colors()
         self.configure_styles()
@@ -62,6 +62,10 @@ class WallpaperManager:
         self.style.configure("TFrame", background=self.colors["bg_light"])
         self.style.configure("TLabel", background=self.colors["bg_light"], foreground=self.colors["text_dark"])
         self.style.configure("TButton", background=self.colors["neutral"], foreground=self.colors["text_light"], padding=5)
+        self.style.configure("Card.TFrame", background=self.colors["bg_dark"], relief="solid", borderwidth=1)
+        self.style.configure("Card.TLabel", background=self.colors["bg_dark"])
+        self.style.configure("CardTitle.TLabel", background=self.colors["bg_dark"], foreground=self.colors["text_light"], font=("Segoe UI", 10, "bold"))
+        self.style.configure("CardHint.TLabel", background=self.colors["bg_dark"], foreground=self.colors["text_dark"], font=("Segoe UI", 9))
         self.style.map(
             "TButton",
             background=[("active", self.colors["primary_dark"]), ("disabled", self.colors["bg_dark"])],
@@ -85,11 +89,7 @@ class WallpaperManager:
                             padding=10, 
                             background=self.colors["bg_dark"],
                             foreground=self.colors["text_light"])
-        
-        self.style.configure("Preview.TLabel", 
-                            font=("Segoe UI", 11), 
-                            padding=5)
-        
+
         # Button styles
         self.style.configure("Primary.TButton", 
                             font=("Segoe UI", 10),
@@ -105,27 +105,10 @@ class WallpaperManager:
                             font=("Segoe UI", 10),
                     background=self.colors["danger"],
                     foreground=self.colors["text_light"])
-        
-        # Treeview styling
-        self.style.configure("Treeview", 
-                            rowheight=30,
-                            background=self.colors["bg_light"],
-                            fieldbackground=self.colors["bg_light"],
-                    foreground=self.colors["text_light"],
-                    bordercolor=self.colors["border"],
-                    lightcolor=self.colors["border"],
-                    darkcolor=self.colors["border"],
-                    font=("Segoe UI", 10))
-        
-        self.style.configure("Treeview.Heading", 
-                            font=("Segoe UI", 11, "bold"),
-                    background=self.colors["bg_dark"],
-                            foreground=self.colors["text_light"])
-        
-        # Configure hover and selection colors
-        self.style.map("Treeview",
-                background=[("selected", self.colors["primary_dark"])],
-                    foreground=[("selected", self.colors["text_light"])])
+        self.style.map(
+            "Card.TFrame",
+            background=[("active", self.colors["bg_light"])],
+        )
         
     def create_layout(self):
         """Create the main application layout"""
@@ -144,70 +127,20 @@ class WallpaperManager:
             anchor="center"
         )
         self.app_title.pack(fill=tk.X)
+
+        self.instructions = ttk.Label(
+            self.header_frame,
+            text="Click a wallpaper thumbnail to preview the delete prompt.",
+            anchor="center",
+            padding=(0, 0, 0, 8)
+        )
+        self.instructions.pack(fill=tk.X)
         
-        # Content area with horizontal split
+        # Content area with a direct thumbnail gallery
         self.content_frame = ttk.Frame(self.main_container)
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Left panel for wallpaper list
-        self.list_frame = ttk.Frame(self.content_frame)
-        self.list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        
-        # List header
-        self.list_title = ttk.Label(
-            self.list_frame, 
-            text="Wallpaper History", 
-            font=("Segoe UI", 12, "bold"),
-            anchor="w",
-            padding=5
-        )
-        self.list_title.pack(fill=tk.X)
-        
-        # Treeview with scrollbar for wallpaper list
-        self.create_wallpaper_list()
-        
-        # Right panel for image preview
-        self.preview_frame = ttk.Frame(self.content_frame)
-        self.preview_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
-        
-        # Preview header
-        self.preview_title = ttk.Label(
-            self.preview_frame, 
-            text="Preview", 
-            font=("Segoe UI", 12, "bold"),
-            anchor="w",
-            padding=5
-        )
-        self.preview_title.pack(fill=tk.X)
-        
-        # Container for the preview image with decorative border
-        self.preview_container = ttk.Frame(self.preview_frame, style="TFrame")
-        self.preview_container.pack(fill=tk.BOTH, expand=True)
-        
-        # Create canvas for preview with border and drop shadow effect
-        self.preview_canvas = tk.Canvas(
-            self.preview_container, 
-            bg=self.colors["bg_light"],
-            highlightthickness=1,
-            highlightbackground=self.colors["border"]
-        )
-        self.preview_canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Label to display the preview image
-        self.preview_image = ttk.Label(self.preview_canvas)
-        self.preview_canvas.create_window(0, 0, anchor="nw", window=self.preview_image)
-        
-        # Image info frame (displays details about selected image)
-        self.info_frame = ttk.Frame(self.preview_frame)
-        self.info_frame.pack(fill=tk.X, pady=5)
-        
-        self.image_info = ttk.Label(
-            self.info_frame,
-            text="No wallpaper selected",
-            font=("Segoe UI", 9),
-            padding=5
-        )
-        self.image_info.pack(fill=tk.X)
+
+        self.create_gallery()
         
         # Status bar
         self.status_bar = ttk.Label(
@@ -222,78 +155,61 @@ class WallpaperManager:
         # Bottom action buttons
         self.create_action_buttons()
         
-    def create_wallpaper_list(self):
-        """Create the treeview component for displaying wallpaper paths"""
-        self.tree_frame = ttk.Frame(self.list_frame)
-        self.tree_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Add search box above treeview
-        self.search_frame = ttk.Frame(self.tree_frame)
-        self.search_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        self.search_label = ttk.Label(
-            self.search_frame,
-            text="🔍 Search:",
-            padding=(5, 0)
+    def create_gallery(self):
+        """Create the scrollable thumbnail gallery."""
+        self.gallery_header = ttk.Frame(self.content_frame)
+        self.gallery_header.pack(fill=tk.X, pady=(0, 8))
+
+        self.gallery_title = ttk.Label(
+            self.gallery_header,
+            text="Wallpaper History",
+            font=("Segoe UI", 12, "bold"),
+            anchor="w",
+            padding=5,
         )
+        self.gallery_title.pack(side=tk.LEFT)
+
+        self.search_frame = ttk.Frame(self.gallery_header)
+        self.search_frame.pack(side=tk.RIGHT)
+
+        self.search_label = ttk.Label(self.search_frame, text="Search:", padding=(5, 0))
         self.search_label.pack(side=tk.LEFT)
-        
+
         self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(
-            self.search_frame,
-            textvariable=self.search_var,
-            width=40
-        )
-        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.search_var.trace_add("write", self.filter_list)
-        
-        self.clear_search_btn = ttk.Button(
-            self.search_frame,
-            text="✕",
-            width=3,
-            command=self.clear_search
-        )
+        self.search_entry = ttk.Entry(self.search_frame, textvariable=self.search_var, width=32)
+        self.search_entry.pack(side=tk.LEFT, padx=5)
+        self.search_var.trace_add("write", self.filter_gallery)
+
+        self.clear_search_btn = ttk.Button(self.search_frame, text="Clear", command=self.clear_search)
         self.clear_search_btn.pack(side=tk.LEFT)
-        
-        # Treeview container with scrollbar
-        self.list_container = ttk.Frame(self.tree_frame)
-        self.list_container.pack(fill=tk.BOTH, expand=True)
-        
-        # Scrollbar for treeview
-        self.scrollbar = ttk.Scrollbar(self.list_container)
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Treeview for wallpaper list with multiple columns
-        self.image_list = ttk.Treeview(
-            self.list_container, 
-            columns=("filename", "path"), 
-            show="headings",
-            yscrollcommand=self.scrollbar.set
+
+        self.gallery_canvas = tk.Canvas(
+            self.content_frame,
+            bg=self.colors["bg_light"],
+            highlightthickness=1,
+            highlightbackground=self.colors["border"]
         )
-        
-        # Configure columns
-        self.image_list.heading("filename", text="Filename")
-        self.image_list.heading("path", text="Full Path")
-        self.image_list.column("filename", width=150)
-        self.image_list.column("path", width=350)
-        
-        self.image_list.pack(fill=tk.BOTH, expand=True)
-        
-        # Configure scrollbar to work with treeview
-        self.scrollbar.config(command=self.image_list.yview)
+        self.gallery_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.gallery_scrollbar = ttk.Scrollbar(self.content_frame, orient=tk.VERTICAL, command=self.gallery_canvas.yview)
+        self.gallery_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.gallery_canvas.configure(yscrollcommand=self.gallery_scrollbar.set)
+
+        self.gallery_inner = ttk.Frame(self.gallery_canvas)
+        self.gallery_window = self.gallery_canvas.create_window((0, 0), window=self.gallery_inner, anchor="nw")
+
+        self.gallery_inner.bind("<Configure>", self.update_gallery_scrollregion)
+        self.gallery_canvas.bind("<Configure>", self.resize_gallery_window)
+        self.gallery_canvas.bind_all("<MouseWheel>", self.on_mousewheel)
         
     def create_action_buttons(self):
         """Create the action buttons at the bottom of the UI"""
         self.button_frame = ttk.Frame(self.main_container)
         self.button_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=10, padx=10)
         
-        # Define button data: (text, command, icon, style)
+        # Keep the footer minimal because the gallery items are the primary controls.
         button_data = [
             ("Refresh List", self.refresh_list, "🔄", "Primary.TButton"),
-            ("Show in Explorer", self.show_in_explorer, "📂", "Primary.TButton"),
-            ("Copy Path", self.copy_path, "📋", "Primary.TButton"),
-            ("Set as Wallpaper", self.set_as_wallpaper, "🖼️", "Success.TButton"),
-            ("Delete Selected", self.delete_selected, "🗑️", "Danger.TButton")
         ]
         
         # Create buttons with consistent styling
@@ -309,37 +225,7 @@ class WallpaperManager:
             
     def initialize_components(self):
         """Set up event bindings for interactive components"""
-        # Double-click to open in explorer
-        self.image_list.bind("<Double-1>", self.show_in_explorer)
-        # Selection to update preview
-        self.image_list.bind("<<TreeviewSelect>>", self.update_preview)
-        # Right-click context menu
-        self.create_context_menu()
-        
-    def create_context_menu(self):
-        """Create right-click context menu for the image list"""
-        self.context_menu = tk.Menu(self.root, tearoff=0)
-        self.context_menu.add_command(label="Preview", command=self.update_preview)
-        self.context_menu.add_command(label="Show in Explorer", command=self.show_in_explorer)
-        self.context_menu.add_command(label="Copy Path", command=self.copy_path)
-        self.context_menu.add_command(label="Set as Wallpaper", command=self.set_as_wallpaper)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="Delete", command=self.delete_selected)
-        
-        # Bind right-click to show context menu
-        self.image_list.bind("<Button-3>", self.show_context_menu)
-        
-    def show_context_menu(self, event):
-        """Display context menu at mouse position"""
-        try:
-            # Select the item under cursor
-            item = self.image_list.identify_row(event.y)
-            if item:
-                self.image_list.selection_set(item)
-                self.update_preview()
-                self.context_menu.post(event.x_root, event.y_root)
-        except:
-            pass
+        self.root.bind("<Configure>", self.schedule_gallery_refresh)
             
     def get_image_cache(self):
         """Retrieve wallpaper image paths from Windows Registry"""
@@ -371,33 +257,135 @@ class WallpaperManager:
         return match.group(1) if match else None
 
     def populate_image_list(self):
-        """Fill the treeview with wallpaper paths"""
-        # Clear existing items
-        self.image_list.delete(*self.image_list.get_children())
-        
-        # Add paths to treeview
+        """Fill the gallery with wallpaper previews."""
+        for child in self.gallery_inner.winfo_children():
+            child.destroy()
+        self.thumbnail_refs.clear()
+
+        search_text = self.search_var.get().lower().strip()
+        visible_paths = []
         for path in self.image_cache:
-            if os.path.exists(path):
-                filename = os.path.basename(path)
-                self.image_list.insert("", "end", values=(filename, path))
-    
-    def filter_list(self, *args):
-        """Filter the wallpaper list based on search text"""
-        search_text = self.search_var.get().lower()
-        
-        # Clear the current list
-        self.image_list.delete(*self.image_list.get_children())
-        
-        # Add matching items back
-        for path in self.image_cache:
-            if os.path.exists(path):
-                filename = os.path.basename(path)
-                if search_text in filename.lower() or search_text in path.lower():
-                    self.image_list.insert("", "end", values=(filename, path))
+            if not os.path.exists(path):
+                continue
+            filename = os.path.basename(path)
+            if not search_text or search_text in filename.lower() or search_text in path.lower():
+                visible_paths.append(path)
+
+        if not visible_paths:
+            empty_state = ttk.Label(
+                self.gallery_inner,
+                text="No matching wallpapers found.",
+                padding=24,
+                anchor="center",
+            )
+            empty_state.grid(row=0, column=0, sticky="nsew")
+            self.status_bar.config(text="No wallpapers to display")
+            self.update_gallery_scrollregion()
+            return
+
+        columns = self.get_gallery_columns()
+        for column in range(columns):
+            self.gallery_inner.columnconfigure(column, weight=1)
+
+        for index, path in enumerate(visible_paths):
+            row = index // columns
+            column = index % columns
+            self.create_thumbnail_tile(path, row, column)
+
+        self.status_bar.config(text=f"Showing {len(visible_paths)} wallpaper previews")
+        self.update_gallery_scrollregion()
+
+    def filter_gallery(self, *args):
+        """Filter the wallpaper gallery based on search text."""
+        self.populate_image_list()
     
     def clear_search(self):
         """Clear the search box"""
         self.search_var.set("")
+        self.populate_image_list()
+
+    def get_gallery_columns(self):
+        """Calculate the number of thumbnail columns to show."""
+        width = max(self.gallery_canvas.winfo_width(), 1)
+        return max(1, width // 230)
+
+    def create_thumbnail_tile(self, image_path, row, column):
+        """Create a clickable preview tile for one wallpaper."""
+        filename = os.path.basename(image_path)
+
+        tile = ttk.Frame(self.gallery_inner, style="Card.TFrame")
+        tile.grid(row=row, column=column, padx=8, pady=8, sticky="nsew")
+
+        preview_size = (180, 120)
+        try:
+            img = Image.open(image_path)
+            img.thumbnail(preview_size, Image.Resampling.LANCZOS)
+            thumbnail = ImageTk.PhotoImage(img)
+        except Exception:
+            fallback = Image.new("RGB", preview_size, self.colors["border"])
+            thumbnail = ImageTk.PhotoImage(fallback)
+
+        self.thumbnail_refs[image_path] = thumbnail
+
+        preview_label = ttk.Label(tile, image=thumbnail, style="Card.TLabel")
+        preview_label.pack(padx=8, pady=(8, 4))
+
+        title_label = ttk.Label(
+            tile,
+            text=filename,
+            style="CardTitle.TLabel",
+            wraplength=190,
+            anchor="center",
+            justify="center"
+        )
+        title_label.pack(fill=tk.X, padx=8)
+
+        hint_label = ttk.Label(tile, text="Click to delete", style="CardHint.TLabel", anchor="center")
+        hint_label.pack(fill=tk.X, padx=8, pady=(0, 8))
+
+        for widget in (tile, preview_label, title_label, hint_label):
+            widget.bind("<Button-1>", lambda event, path=image_path: self.confirm_delete(path))
+
+    def schedule_gallery_refresh(self, event=None):
+        """Debounce layout refreshes while the window is resizing."""
+        if event is not None and event.widget is not self.root:
+            return
+        if self.resize_job is not None:
+            self.root.after_cancel(self.resize_job)
+        self.resize_job = self.root.after(120, self.refresh_gallery_layout)
+
+    def refresh_gallery_layout(self):
+        """Rebuild the gallery after a resize so thumbnails stay evenly spaced."""
+        self.resize_job = None
+        self.populate_image_list()
+
+    def resize_gallery_window(self, event):
+        """Keep the inner frame aligned to the canvas width."""
+        self.gallery_canvas.itemconfigure(self.gallery_window, width=event.width)
+
+    def update_gallery_scrollregion(self, event=None):
+        """Keep the canvas scroll region in sync with the content size."""
+        self.gallery_canvas.configure(scrollregion=self.gallery_canvas.bbox("all"))
+
+    def on_mousewheel(self, event):
+        """Allow scrolling through the gallery with the mouse wheel."""
+        if event.widget == self.gallery_canvas or str(event.widget).startswith(str(self.gallery_canvas)):
+            self.gallery_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def confirm_delete(self, image_path):
+        """Prompt before deleting a wallpaper from the gallery."""
+        if not os.path.exists(image_path):
+            messagebox.showerror("File Error", "Wallpaper file not found")
+            self.status_bar.config(text="Error: File not found")
+            return
+
+        filename = os.path.basename(image_path)
+        confirm = messagebox.askyesno(
+            "Delete Wallpaper",
+            f"Delete this wallpaper?\n\n{filename}",
+        )
+        if confirm:
+            self.delete_wallpaper(image_path)
         
     def get_dominant_color(self, image_path):
         """Get the dominant color from an image to match UI elements"""
@@ -427,155 +415,26 @@ class WallpaperManager:
         except:
             return "#3498db"  # Default color on error
 
-    def update_preview(self, event=None):
-        """Update the preview image when a wallpaper is selected"""
-        selected_item = self.image_list.selection()
-        if selected_item:
-            item_id = selected_item[0]
-            # Get file information
-            item_values = self.image_list.item(item_id, "values")
-            filename = item_values[0]
-            image_path = item_values[1]
-            
-            try:
-                # Get file information
-                file_size = os.path.getsize(image_path) / (1024 * 1024)  # Convert to MB
-                
-                # Open and resize the image for preview
-                img = Image.open(image_path)
-                img_width, img_height = img.size
-                
-                # Update image info
-                self.image_info.config(
-                    text=f"{filename} | {img_width}x{img_height} | {file_size:.2f} MB"
-                )
-                
-                # Calculate aspect ratio for resizing
-                preview_width = self.preview_canvas.winfo_width() - 20
-                preview_height = self.preview_canvas.winfo_height() - 20
-                
-                if preview_width < 10:  # Not yet fully rendered
-                    preview_width = 400
-                    preview_height = 300
-                
-                # Resize while maintaining aspect ratio
-                img.thumbnail((preview_width, preview_height), Image.Resampling.LANCZOS)
-                
-                # Convert to Tkinter-compatible image
-                img_tk = ImageTk.PhotoImage(img)
-                
-                # Update preview
-                self.preview_image.config(image=img_tk)
-                self.preview_image_ref = img_tk
-                
-                # Center the image in canvas
-                canvas_width = self.preview_canvas.winfo_width()
-                canvas_height = self.preview_canvas.winfo_height()
-                img_width, img_height = img_tk.width(), img_tk.height()
-                
-                x_position = (canvas_width - img_width) // 2
-                y_position = (canvas_height - img_height) // 2
-                
-                # Position the image
-                self.preview_canvas.create_window(x_position, y_position, anchor="nw", window=self.preview_image)
-                
-                # Update status
-                self.status_bar.config(text=f"Previewing: {filename}")
-                
-            except Exception as e:
-                self.preview_image.config(image="")
-                self.image_info.config(text="Error loading preview")
-                messagebox.showerror("Preview Error", f"Failed to load image: {e}")
-        else:
-            # No selection
-            self.preview_image.config(image="")
-            self.image_info.config(text="No wallpaper selected")
-
-    def show_in_explorer(self, event=None):
-        """Open File Explorer to the directory containing the selected wallpaper"""
-        selected_item = self.image_list.selection()
-        if selected_item:
-            item_id = selected_item[0]
-            image_path = self.image_list.item(item_id, "values")[1]
-            if os.path.exists(image_path):
-                os.startfile(os.path.dirname(image_path))
-                self.status_bar.config(text=f"Opened folder: {os.path.dirname(image_path)}")
-            else:
-                messagebox.showerror("File Error", "Wallpaper file not found")
-                self.status_bar.config(text="Error: File not found")
-
     def refresh_list(self):
         """Refresh the wallpaper list from registry"""
         self.image_cache = self.get_image_cache()
         self.populate_image_list()
         self.status_bar.config(text=f"Refreshed wallpaper list - found {len(self.image_cache)} items")
 
-    def delete_selected(self):
-        """Delete the selected wallpaper file"""
-        selected_item = self.image_list.selection()
-        if not selected_item:
-            messagebox.showinfo("Selection", "Please select a wallpaper to delete")
-            return
+    def delete_wallpaper(self, image_path):
+        """Delete the selected wallpaper file."""
+        filename = os.path.basename(image_path)
 
-        item_id = selected_item[0]
-        filename = self.image_list.item(item_id, "values")[0]
-        image_path = self.image_list.item(item_id, "values")[1]
-        
-        confirm = messagebox.askyesno(
-            "Confirm Delete", 
-            f"Are you sure you want to delete:\n{filename}?"
-        )
-        
-        if confirm:
-            try:
-                os.remove(image_path)
-                self.image_list.delete(item_id)
-                self.preview_image.config(image="")
-                self.preview_image_ref = None
-                self.image_info.config(text="No wallpaper selected")
-                self.status_bar.config(text=f"Deleted: {filename}")
-                
-                # Remove from cache
-                if image_path in self.image_cache:
-                    self.image_cache.remove(image_path)
-                
-            except Exception as e:
-                messagebox.showerror("Delete Error", f"Failed to delete file: {e}")
-                self.status_bar.config(text="Error deleting file")
-
-    def copy_path(self):
-        """Copy the selected wallpaper path to clipboard"""
-        selected_item = self.image_list.selection()
-        if not selected_item:
-            messagebox.showinfo("Selection", "Please select a wallpaper to copy its path")
-            return
-            
-        image_path = self.image_list.item(selected_item[0], "values")[1]
-        self.root.clipboard_clear()
-        self.root.clipboard_append(image_path)
-        self.root.update()
-        self.show_tooltip("Path copied to clipboard!")
-        self.status_bar.config(text="Path copied to clipboard")
-    
-    def set_as_wallpaper(self):
-        """Set the selected image as desktop wallpaper"""
-        selected_item = self.image_list.selection()
-        if not selected_item:
-            messagebox.showinfo("Selection", "Please select a wallpaper to set")
-            return
-            
-        item_id = selected_item[0]
-        image_path = self.image_list.item(item_id, "values")[1]
-        filename = self.image_list.item(item_id, "values")[0]
-        
         try:
-            import ctypes
-            ctypes.windll.user32.SystemParametersInfoW(20, 0, image_path, 3)
-            self.show_tooltip("Wallpaper set successfully!")
-            self.status_bar.config(text=f"Wallpaper set: {filename}")
+            os.remove(image_path)
+            if image_path in self.image_cache:
+                self.image_cache.remove(image_path)
+            self.thumbnail_refs.pop(image_path, None)
+            self.populate_image_list()
+            self.status_bar.config(text=f"Deleted: {filename}")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to set wallpaper: {e}")
-            self.status_bar.config(text="Error setting wallpaper")
+            messagebox.showerror("Delete Error", f"Failed to delete file: {e}")
+            self.status_bar.config(text="Error deleting file")
 
     def show_tooltip(self, message):
         """Display a temporary tooltip message"""
